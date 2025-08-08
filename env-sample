@@ -1,0 +1,25 @@
+# n8n Configuration
+N8N_BASIC_AUTH_ACTIVE=true
+N8N_BASIC_AUTH_USER=admin
+N8N_BASIC_AUTH_PASSWORD=change-this-secure-password
+N8N_HOST=your-domain.com
+N8N_PROTOCOL=https
+WEBHOOK_URL=https://your-domain.com
+N8N_ENCRYPTION_KEY=your-32-character-encryption-key-here-123456
+N8N_SECURE_COOKIE=true
+
+# Database
+DB_PASSWORD=secure-database-password-here
+
+# API Keys (to be configured in n8n credentials)
+# TWILIO_ACCOUNT_SID=your-twilio-account-sid
+# TWILIO_AUTH_TOKEN=your-twilio-auth-token
+# OPENAI_API_KEY=your-openai-api-key
+
+# Google API Configuration
+# Set up in Google Cloud Console and add to n8n credentials
+# GOOGLE_CLIENT_ID=your-google-client-id
+# GOOGLE_CLIENT_SECRET=your-google-client-secret
+
+# WhatsApp Configuration
+TWILIO_WHATSAPP_FROM=+14155238886
