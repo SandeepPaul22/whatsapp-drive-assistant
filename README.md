@@ -79,7 +79,7 @@ The workflow consists of 12 connected nodes:
 
 ```
 whatsapp-drive-assistant/
-├── whatsapp-drive-assistant-workflow.json  # Main n8n workflow
+├── whatsapp_google_drive_assistant.json    # Main n8n workflow
 ├── docker-compose.yml                      # Docker deployment config
 ├── .env-sample                             # Environment variables template
 ├── README.md                               # Setup guide
@@ -87,26 +87,7 @@ whatsapp-drive-assistant/
 ├── stop.sh                                 # Helper script to stop services  
 ├── logs.sh                                 # View n8n logs
 ├── backup.sh                               # Backup workflows and data
-└── docs/
-    └── DEMO.md                             # Demo video instructions
-```
 
-## 🎥 Demo Video Script
-
-1. **Setup Demonstration** (2 minutes)
-   - Show Twilio WhatsApp Sandbox configuration
-   - Import n8n workflow
-   - Configure Google Drive and OpenAI credentials
-
-2. **Command Testing** (2 minutes)
-   - Send "HELP" command and show response
-   - Demonstrate "LIST /Documents" showing files
-   - Show "SUMMARY" of a PDF document with AI analysis
-
-3. **Safety Features** (1 minute)
-   - Attempt DELETE command without CONFIRM
-   - Show confirmation prompt and successful deletion
-   - Display audit log entry in Google Sheets
 
 ## ⚙️ Configuration Details
 
