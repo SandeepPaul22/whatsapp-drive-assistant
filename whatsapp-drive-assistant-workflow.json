@@ -1,251 +1,171 @@
 {
-  "name": "WhatsApp Google Drive Assistant",
-  "active": false,
-  "nodes": [
-    {
-      "parameters": {
-        "httpMethod": "POST",
-        "path": "whatsapp-webhook",
-        "responseMode": "responseNode"
-      },
-      "id": "ac8d2679-4b9c-4348-bf1c-37b5a6e6aa92",
-      "name": "WhatsApp Webhook",
-      "type": "n8n-nodes-base.webhook",
-      "typeVersion": 1,
-      "position": [
-        240,
-        300
-      ]
-    },
-    {
-      "parameters": {
-        "functionCode": "// Parse WhatsApp message and extract command\nconst body = $input.all()[0].json.Body || '';\nconst from = $input.all()[0].json.From || '';\nconst to = $input.all()[0].json.To || '';\n\n// Extract command from message\nconst message = body.toLowerCase().trim();\nlet command = 'UNKNOWN';\nlet path = '';\nlet target = '';\n\n// Parse commands: LIST /path, DELETE /path, MOVE /source /target, SUMMARY /path\nif (message.startsWith('list ')) {\n  command = 'LIST';\n  path = message.substring(5).trim();\n} else if (message.startsWith('delete ')) {\n  if (message.includes('confirm')) {\n    command = 'DELETE';\n    path = message.replace('delete ', '').replace(' confirm', '').trim();\n  } else {\n    command = 'DELETE_CONFIRM';\n    path = message.substring(7).trim();\n  }\n} else if (message.startsWith('move ')) {\n  const parts = message.substring(5).trim().split(' ');\n  command = 'MOVE';\n  path = parts[0] || '';\n  target = parts[1] || '';\n} else if (message.startsWith('summary ')) {\n  command = 'SUMMARY';\n  path = message.substring(8).trim();\n} else if (message.toLowerCase() === 'help') {\n  command = 'HELP';\n}\n\nreturn [{\n  json: {\n    command: command,\n    path: path,\n    target: target,\n    from: from,\n    to: to,\n    originalMessage: body\n  }\n}];"
-      },
-      "id": "b8c123f5-4d7e-4a2b-9f8c-1e5a7b3c9d2f",
-      "name": "Parse Command",
-      "type": "n8n-nodes-base.function",
-      "typeVersion": 1,
-      "position": [
-        460,
-        300
-      ]
-    },
-    {
-      "parameters": {
-        "conditions": {
-          "string": [
-            {
-              "value1": "={{$json.command}}",
-              "operation": "equal",
-              "value2": "LIST"
-            }
-          ]
-        }
-      },
-      "id": "c9d234e6-5e8f-4b3c-af9d-2f6b8c4d0e3g",
-      "name": "Is LIST Command",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 1,
-      "position": [
-        680,
-        200
-      ]
-    },
-    {
-      "parameters": {
-        "conditions": {
-          "string": [
-            {
-              "value1": "={{$json.command}}",
-              "operation": "equal",
-              "value2": "SUMMARY"
-            }
-          ]
-        }
-      },
-      "id": "d0e345f7-6f9g-5c4d-bg0e-3g7c9d5e1f4h",
-      "name": "Is SUMMARY Command",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 1,
-      "position": [
-        680,
-        400
-      ]
-    },
-    {
-      "parameters": {
-        "operation": "search",
-        "q": "={{$json.path}}"
-      },
-      "id": "e1f456g8-7g0h-6d5e-ch1f-4h8d0e6f2g5i",
-      "name": "Google Drive List",
-      "type": "n8n-nodes-base.googleDrive",
-      "typeVersion": 3,
-      "position": [
-        900,
-        200
-      ]
-    },
-    {
-      "parameters": {
-        "operation": "download",
-        "fileId": "={{$json.id}}"
-      },
-      "id": "f2g567h9-8h1i-7e6f-di2g-5i9e1f7g3h6j",
-      "name": "Google Drive Download",
-      "type": "n8n-nodes-base.googleDrive",
-      "typeVersion": 3,
-      "position": [
-        900,
-        400
-      ]
-    },
-    {
-      "parameters": {
-        "functionCode": "// Format response based on command type\nconst command = $('Parse Command').first().json.command;\nconst input = $input.all();\nlet responseText = '';\n\nswitch(command) {\n  case 'LIST':\n    if (input.length === 0) {\n      responseText = 'No files found in the specified path.';\n    } else {\n      responseText = `Files found (${input.length}):\\n`;\n      input.slice(0, 10).forEach(item => {\n        responseText += `\u2022 ${item.json.name}\\n`;\n      });\n      if (input.length > 10) {\n        responseText += `... and ${input.length - 10} more files`;\n      }\n    }\n    break;\n  \n  case 'DELETE_CONFIRM':\n    responseText = `\u26a0\ufe0f Are you sure you want to delete: ${$('Parse Command').first().json.path}?\\n\\nTo confirm, send: DELETE ${$('Parse Command').first().json.path} CONFIRM`;\n    break;\n    \n  case 'DELETE':\n    responseText = '\u2705 File deleted successfully.';\n    break;\n  \n  case 'MOVE':\n    responseText = '\u2705 File moved successfully.';\n    break;\n  \n  case 'SUMMARY':\n    responseText = 'Document summary: ' + (input[0]?.json?.extractedText?.substring(0, 500) || 'Could not extract text from document.');\n    break;\n  \n  case 'HELP':\n    responseText = `\ud83d\udccb Available commands:\\n\u2022 LIST /folder - List files in folder\\n\u2022 DELETE /path/file.ext CONFIRM - Delete a file\\n\u2022 MOVE /source/file.ext /target - Move file\\n\u2022 SUMMARY /path/file.ext - Summarize document\\n\u2022 HELP - Show this help`;\n    break;\n  \n  default:\n    responseText = '\u274c Unknown command. Send HELP for available commands.';\n}\n\nconst fromPhone = $('Parse Command').first().json.from;\nconst toPhone = $('Parse Command').first().json.to;\n\nreturn [{\n  json: {\n    response: responseText,\n    from: toPhone,\n    to: fromPhone\n  }\n}];"
-      },
-      "id": "g3h678i0-9i2j-8f7g-ej3h-6j0f2g8h4i7k",
-      "name": "Format Response",
-      "type": "n8n-nodes-base.function",
-      "typeVersion": 1,
-      "position": [
-        1120,
-        300
-      ]
-    },
-    {
-      "parameters": {
-        "body": "={{$json.response}}",
-        "from": "={{$json.from}}",
-        "to": "={{$json.to}}"
-      },
-      "id": "h4i789j1-0j3k-9g8h-fk4i-7k1g3h9i5j8l",
-      "name": "Send WhatsApp Reply",
-      "type": "n8n-nodes-base.twilio",
-      "typeVersion": 1,
-      "position": [
-        1340,
-        300
-      ]
-    },
-    {
-      "parameters": {
-        "respondWith": "text",
-        "responseBody": "OK"
-      },
-      "id": "i5j890k2-1k4l-0h9i-gl5j-8l2h4i0j6k9m",
-      "name": "Webhook Response",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1,
-      "position": [
-        1560,
-        300
-      ]
-    }
-  ],
-  "connections": {
-    "WhatsApp Webhook": {
-      "main": [
-        [
-          {
-            "node": "Parse Command",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Parse Command": {
-      "main": [
-        [
-          {
-            "node": "Is LIST Command",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "Is SUMMARY Command",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "Format Response",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Is LIST Command": {
-      "main": [
-        [
-          {
-            "node": "Google Drive List",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Is SUMMARY Command": {
-      "main": [
-        [
-          {
-            "node": "Google Drive Download",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Google Drive List": {
-      "main": [
-        [
-          {
-            "node": "Format Response",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Google Drive Download": {
-      "main": [
-        [
-          {
-            "node": "Format Response",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Format Response": {
-      "main": [
-        [
-          {
-            "node": "Send WhatsApp Reply",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Send WhatsApp Reply": {
-      "main": [
-        [
-          {
-            "node": "Webhook Response",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    }
-  },
-  "createdAt": "2024-08-08T15:30:00.000Z",
-  "updatedAt": "2024-08-08T15:30:00.000Z",
-  "settings": {},
-  "staticData": {},
-  "tags": []
+"name": "WhatsApp Google Drive Assistant",
+"active": false,
+"nodes": [
+{
+"parameters": {
+"httpMethod": "POST",
+"path": "whatsapp-webhook",
+"responseMode": "responseNode"
+},
+"id": "ac8d2679-4b9c-4348-bf1c-37b5a6e6aa92",
+"name": "WhatsApp Webhook",
+"type": "n8n-nodes-base.webhook",
+"typeVersion": 1,
+"position": [240,,
+{
+"parameters": {
+"functionCode": "// Parse WhatsApp message and extract command\nconst item = $input.first().json || {};\nconst body = (item.Body || '').toString();\nconst from = (item.From || '').toString();\nconst to = (item.To || '').toString();\n\nconst message = body.trim().toLowerCase();\nlet command = 'UNKNOWN';\nlet path = '';\nlet target = '';\n\nif (message.startsWith('list ')) {\n command = 'LIST';\n path = message.substring(5).trim();\n} else if (message.startsWith('delete ')) {\n if (message.includes(' confirm')) {\n command = 'DELETE';\n path = message.replace(/^delete\s+/, '').replace(/\s+confirm$/, '').trim();\n } else {\n command = 'DELETE_CONFIRM';\n path = message.substring(7).trim();\n }\n} else if (message.startsWith('move ')) {\n const parts = message.substring(5).trim().split(/\s+/);\n command = 'MOVE';\n path = parts || '';\n target = parts || '';\n} else if (message.startsWith('summary ')) {\n command = 'SUMMARY';\n path = message.substring(8).trim();\n} else if (message === 'help') {\n command = 'HELP';\n}\n\nreturn [{ json: { command, path, target, from, to, originalMessage: body } }];"
+},
+"id": "b8c123f5-4d7e-4a2b-9f8c-1e5a7b3c9d2f",
+"name": "Parse Command",
+"type": "n8n-nodes-base.function",
+"typeVersion": 1,
+"position": [460,,
+{
+"parameters": {
+"conditions": {
+"string": [
+{
+"value1": "={{$json.command}}",
+"operation": "equal",
+"value2": "LIST"
+}
+]
+}
+},
+"id": "c9d234e6-5e8f-4b3c-af9d-2f6b8c4d0e3g",
+"name": "Is LIST Command",
+"type": "n8n-nodes-base.if",
+"typeVersion": 1,
+"position": [680,,
+{
+"parameters": {
+"conditions": {
+"string": [
+{
+"value1": "={{$json.command}}",
+"operation": "equal",
+"value2": "SUMMARY"
+}
+]
+}
+},
+"id": "d0e345f7-6f9g-5c4d-bg0e-3g7c9d5e1f4h",
+"name": "Is SUMMARY Command",
+"type": "n8n-nodes-base.if",
+"typeVersion": 1,
+"position": [680,,
+{
+"parameters": {
+"operation": "search",
+"q": "={{$json.path}}"
+},
+"id": "e1f456g8-7g0h-6d5e-ch1f-4h8d0e6f2g5i",
+"name": "Google Drive List",
+"type": "n8n-nodes-base.googleDrive",
+"typeVersion": 3,
+"position": [900, "credentials": {
+"googleDriveOAuth2Api": {
+"id": "",
+"name": ""
+}
+}
+},
+{
+"parameters": {
+"operation": "download",
+"fileId": "={{$json.id}}"
+},
+"id": "f2g567h9-8h1i-7e6f-di2g-5i9e1f7g3h6j",
+"name": "Google Drive Download",
+"type": "n8n-nodes-base.googleDrive",
+"typeVersion": 3,
+"position": [900, "credentials": {
+"googleDriveOAuth2Api": {
+"id": "",
+"name": ""
+}
+}
+},
+{
+"parameters": {
+"functionCode": "// Format response based on command and inputs\nconst cmd = $('Parse Command').first().json.command;\nconst pc = $('Parse Command').first().json;\nconst items = $input.all();\nlet responseText = '';\n\nswitch (cmd) {\n case 'LIST': {\n if (items.length === 0) {\n responseText = 'No files found in the specified path.';\n } else {\n responseText = Files found (${items.length}):\\n;\n items.slice(0, 10).forEach(i => {\n const name = i.json.name || i.json.title || i.json.fileName || 'Unnamed';\n responseText += - ${name}\\n;\n });\n if (items.length > 10) responseText += ... and ${items.length - 10} more files;\n }\n break;\n }\n case 'DELETE_CONFIRM':\n responseText = ⚠️ Are you sure you want to delete: ${pc.path}?\\n\\nTo confirm, send: DELETE ${pc.path} CONFIRM;\n break;\n case 'DELETE':\n responseText = '✅ File deleted successfully.';\n break;\n case 'MOVE':\n responseText = '✅ File moved successfully.';\n break;\n case 'SUMMARY': {\n const txt = items?.json?.extractedText || '';\n responseText = 'Document summary: ' + (txt ? txt.substring(0, 500) : 'Could not extract text from document.');\n break;\n }\n case 'HELP':\n responseText = 📋 Available commands:\\n- LIST /folder - List files in folder\\n- DELETE /path/file.ext CONFIRM - Delete a file\\n- MOVE /source/file.ext /target - Move file\\n- SUMMARY /path/file.ext - Summarize document\\n- HELP - Show this help;\n break;\n default:\n responseText = '❌ Unknown command. Send HELP for available commands.';\n}\n\nreturn [{ json: { response: responseText, from: pc.to, to: pc.from } }];"
+},
+"id": "g3h678i0-9i2j-8f7g-ej3h-6j0f2g8h4i7k",
+"name": "Format Response",
+"type": "n8n-nodes-base.function",
+"typeVersion": 1,
+"position": [1120,
+},
+{
+"parameters": {
+"resource": "message",
+"operation": "send",
+"from": "={{$json.from}}",
+"to": "={{$json.to}}",
+"message": "={{$json.body || $json.response}}"
+},
+"id": "h4i789j1-0j3k-9g8h-fk4i-7k1g3h9i5j8l",
+"name": "Send WhatsApp Reply",
+"type": "n8n-nodes-base.twilio",
+"typeVersion": 1,
+"position": [1340,,
+"credentials": {
+"twilioApi": {
+"id": "",
+"name": ""
+}
+}
+},
+{
+"parameters": {
+"respondWith": "text",
+"responseBody": "OK",
+"options": {
+"responseCode": 200
+}
+},
+"id": "i5j890k2-1k4l-0h9i-gl5j-8l2h4i0j6k9m",
+"name": "Webhook Response",
+"type": "n8n-nodes-base.respondToWebhook",
+"typeVersion": 1,
+"position": [1560,
+}
+],
+"connections": {
+"WhatsApp Webhook": {
+"main": [[{ "node": "Parse Command", "type": "main", "index": 0 }]]
+},
+"Parse Command": {
+"main": [[
+{ "node": "Is LIST Command", "type": "main", "index": 0 },
+{ "node": "Is SUMMARY Command", "type": "main", "index": 0 },
+{ "node": "Format Response", "type": "main", "index": 0 }
+]]
+},
+"Is LIST Command": {
+"main": [[{ "node": "Google Drive List", "type": "main", "index": 0 }]]
+},
+"Is SUMMARY Command": {
+"main": [[{ "node": "Google Drive Download", "type": "main", "index": 0 }]]
+},
+"Google Drive List": {
+"main": [[{ "node": "Format Response", "type": "main", "index": 0 }]]
+},
+"Google Drive Download": {
+"main": [[{ "node": "Format Response", "type": "main", "index": 0 }]]
+},
+"Format Response": {
+"main": [[{ "node": "Send WhatsApp Reply", "type": "main", "index": 0 }]]
+},
+"Send WhatsApp Reply": {
+"main": [[{ "node": "Webhook Response", "type": "main", "index": 0 }]]
+}
+],
+"createdAt": "2024-08-08T15:30:00.000Z",
+"updatedAt": "2024-08-08T15:30:00.000Z",
+"settings": {},
+"staticData": {},
+"tags": []
 }
