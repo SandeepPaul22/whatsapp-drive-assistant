@@ -1,5 +1,5 @@
 {
-"name": "WhatsApp Google Drive Assistant",
+"name": "WhatsApp Google Drive Assistant (Full)",
 "active": false,
 "nodes": [
 {
@@ -8,109 +8,105 @@
 "path": "whatsapp-webhook",
 "responseMode": "responseNode"
 },
-"id": "ac8d2679-4b9c-4348-bf1c-37b5a6e6aa92",
+"id": "node-webhook",
 "name": "WhatsApp Webhook",
 "type": "n8n-nodes-base.webhook",
 "typeVersion": 1,
 "position": [240,,
 {
 "parameters": {
-"functionCode": "// Parse WhatsApp message and extract command\nconst item = $input.first().json || {};\nconst body = (item.Body || '').toString();\nconst from = (item.From || '').toString();\nconst to = (item.To || '').toString();\n\nconst message = body.trim().toLowerCase();\nlet command = 'UNKNOWN';\nlet path = '';\nlet target = '';\n\nif (message.startsWith('list ')) {\n command = 'LIST';\n path = message.substring(5).trim();\n} else if (message.startsWith('delete ')) {\n if (message.includes(' confirm')) {\n command = 'DELETE';\n path = message.replace(/^delete\s+/, '').replace(/\s+confirm$/, '').trim();\n } else {\n command = 'DELETE_CONFIRM';\n path = message.substring(7).trim();\n }\n} else if (message.startsWith('move ')) {\n const parts = message.substring(5).trim().split(/\s+/);\n command = 'MOVE';\n path = parts || '';\n target = parts || '';\n} else if (message.startsWith('summary ')) {\n command = 'SUMMARY';\n path = message.substring(8).trim();\n} else if (message === 'help') {\n command = 'HELP';\n}\n\nreturn [{ json: { command, path, target, from, to, originalMessage: body } }];"
+"functionCode": "// Parse incoming message and always output common fields\nconst item = $input.first().json || {};\nconst body = (item.Body || '').toString().trim();\nconst from = (item.From || '').toString();\nconst to = (item.To || '').toString();\n\nconst lower = body.toLowerCase();\nlet command = 'UNKNOWN';\nlet path = '';\nlet target = '';\n\nif (lower === 'help') {\n command = 'HELP';\n} else if (lower.startsWith('list ')) {\n command = 'LIST';\n path = body.slice(5).trim();\n} else if (lower.startsWith('summary ')) {\n command = 'SUMMARY';\n path = body.slice(8).trim();\n} else if (lower.startsWith('move ')) {\n command = 'MOVE';\n const parts = body.slice(5).trim().split(/\s+/);\n path = parts || '';\n target = parts || '';\n} else if (lower.startsWith('delete ')) {\n if (/\sconfirm\s*$/i.test(body)) {\n command = 'DELETE';\n path = body.replace(/^delete\s+/i, '').replace(/\s+confirm\s*$/i, '').trim();\n } else {\n command = 'DELETE_CONFIRM';\n path = body.slice(7).trim();\n }\n}\n\nreturn [{ json: { command, path, target, from, to, original: body } }];"
 },
-"id": "b8c123f5-4d7e-4a2b-9f8c-1e5a7b3c9d2f",
+"id": "node-parse",
 "name": "Parse Command",
 "type": "n8n-nodes-base.function",
 "typeVersion": 1,
-"position": [460,,
+"position": [480,,
 {
 "parameters": {
 "conditions": {
-"string": [
-{
-"value1": "={{$json.command}}",
-"operation": "equal",
-"value2": "LIST"
-}
-]
+"string": [{ "value1": "={{$json.command}}", "operation": "equal", "value2": "LIST" }]
 }
 },
-"id": "c9d234e6-5e8f-4b3c-af9d-2f6b8c4d0e3g",
-"name": "Is LIST Command",
+"id": "node-if-list",
+"name": "Is LIST",
 "type": "n8n-nodes-base.if",
 "typeVersion": 1,
-"position": [680,,
+"position": [720,,
 {
 "parameters": {
 "conditions": {
-"string": [
-{
-"value1": "={{$json.command}}",
-"operation": "equal",
-"value2": "SUMMARY"
-}
-]
+"string": [{ "value1": "={{$json.command}}", "operation": "equal", "value2": "SUMMARY" }]
 }
 },
-"id": "d0e345f7-6f9g-5c4d-bg0e-3g7c9d5e1f4h",
-"name": "Is SUMMARY Command",
+"id": "node-if-summary",
+"name": "Is SUMMARY",
 "type": "n8n-nodes-base.if",
 "typeVersion": 1,
-"position": [680,,
+"position": [720,,
 {
 "parameters": {
 "operation": "search",
 "q": "={{$json.path}}"
 },
-"id": "e1f456g8-7g0h-6d5e-ch1f-4h8d0e6f2g5i",
+"id": "node-gd-list",
 "name": "Google Drive List",
 "type": "n8n-nodes-base.googleDrive",
 "typeVersion": 3,
-"position": [900, "credentials": {
-"googleDriveOAuth2Api": {
-"id": "",
-"name": ""
-}
-}
-},
+"position": [960,,
 {
 "parameters": {
 "operation": "download",
 "fileId": "={{$json.id}}"
 },
-"id": "f2g567h9-8h1i-7e6f-di2g-5i9e1f7g3h6j",
+"id": "node-gd-download",
 "name": "Google Drive Download",
 "type": "n8n-nodes-base.googleDrive",
 "typeVersion": 3,
-"position": [900, "credentials": {
-"googleDriveOAuth2Api": {
-"id": "",
-"name": ""
-}
-}
+"position": [960,,
+{
+"parameters": {
+"functionCode": "// Ensure downstream items always carry original fields\n// If Drive nodes output items without from/to/command, copy them from the paired base item\nconst base = $('Parse Command').first().json || {};\nreturn $input.all().map(i => ({ json: { ...base, ...i.json } }));"
+},
+"id": "node-merge-list",
+"name": "Carry Base Fields (LIST)",
+"type": "n8n-nodes-base.function",
+"typeVersion": 1,
+"position": [1140,
 },
 {
 "parameters": {
-"functionCode": "// Format response based on command and inputs\nconst cmd = $('Parse Command').first().json.command;\nconst pc = $('Parse Command').first().json;\nconst items = $input.all();\nlet responseText = '';\n\nswitch (cmd) {\n case 'LIST': {\n if (items.length === 0) {\n responseText = 'No files found in the specified path.';\n } else {\n responseText = Files found (${items.length}):\\n;\n items.slice(0, 10).forEach(i => {\n const name = i.json.name || i.json.title || i.json.fileName || 'Unnamed';\n responseText += - ${name}\\n;\n });\n if (items.length > 10) responseText += ... and ${items.length - 10} more files;\n }\n break;\n }\n case 'DELETE_CONFIRM':\n responseText = ⚠️ Are you sure you want to delete: ${pc.path}?\\n\\nTo confirm, send: DELETE ${pc.path} CONFIRM;\n break;\n case 'DELETE':\n responseText = '✅ File deleted successfully.';\n break;\n case 'MOVE':\n responseText = '✅ File moved successfully.';\n break;\n case 'SUMMARY': {\n const txt = items?.json?.extractedText || '';\n responseText = 'Document summary: ' + (txt ? txt.substring(0, 500) : 'Could not extract text from document.');\n break;\n }\n case 'HELP':\n responseText = 📋 Available commands:\\n- LIST /folder - List files in folder\\n- DELETE /path/file.ext CONFIRM - Delete a file\\n- MOVE /source/file.ext /target - Move file\\n- SUMMARY /path/file.ext - Summarize document\\n- HELP - Show this help;\n break;\n default:\n responseText = '❌ Unknown command. Send HELP for available commands.';\n}\n\nreturn [{ json: { response: responseText, from: pc.to, to: pc.from } }];"
+"functionCode": "const base = $('Parse Command').first().json || {};\nreturn $input.all().map(i => ({ json: { ...base, ...i.json } }));"
 },
-"id": "g3h678i0-9i2j-8f7g-ej3h-6j0f2g8h4i7k",
+"id": "node-merge-summary",
+"name": "Carry Base Fields (SUMMARY)",
+"type": "n8n-nodes-base.function",
+"typeVersion": 1,
+"position": [1140,
+},
+{
+"parameters": {
+"functionCode": "// Build human-friendly response text from the current item\nconst j = $json;\nconst cmd = j.command || 'UNKNOWN';\nlet response = '';\n\nswitch (cmd) {\n case 'LIST': {\n const items = $items().map(x => x.json);\n if (items.length <= 1) {\n // Only the carried base or no Drive results\n response = 'No files found in the specified path.';\n } else {\n // When coming from LIST path we have Drive results merged; filter out pure base items if needed\n const files = items.filter(x => x.id || x.name || x.fileName);\n if (files.length === 0) {\n response = 'No files found in the specified path.';\n } else {\n response = Files found (${files.length}):\\n;\n files.slice(0, 10).forEach(f => {\n const name = f.name || f.title || f.fileName || 'Unnamed';\n response += - ${name}\\n;\n });\n if (files.length > 10) response += ... and ${files.length - 10} more files;\n }\n }\n break;\n }\n case 'SUMMARY': {\n const txt = j.extractedText || '';\n response = 'Document summary: ' + (txt ? txt.substring(0, 500) : 'Could not extract text from document.');\n break;\n }\n case 'DELETE_CONFIRM':\n response = ⚠️ Are you sure you want to delete: ${j.path}?\\n\\nTo confirm, send: DELETE ${j.path} CONFIRM;\n break;\n case 'DELETE':\n response = '✅ File deleted successfully.';\n break;\n case 'MOVE':\n response = '✅ File moved successfully.';\n break;\n case 'HELP':\n response = '📋 Available commands:\n- LIST /folder\n- DELETE /path/file.ext CONFIRM\n- MOVE /source/file.ext /target\n- SUMMARY /path/file.ext\n- HELP';\n break;\n default:\n response = '❌ Unknown command. Send HELP for available commands.';\n}\n\nreturn [{ json: { ...j, response, replyFrom: j.to || '', replyTo: j.from || '' } }];"
+},
+"id": "node-format",
 "name": "Format Response",
 "type": "n8n-nodes-base.function",
 "typeVersion": 1,
-"position": [1120,
+"position": [1360,
 },
 {
 "parameters": {
 "resource": "message",
 "operation": "send",
-"from": "={{$json.from}}",
-"to": "={{$json.to}}",
-"message": "={{$json.body || $json.response}}"
+"from": "={{$json.replyFrom}}",
+"to": "={{$json.replyTo}}",
+"message": "={{$json.response}}"
 },
-"id": "h4i789j1-0j3k-9g8h-fk4i-7k1g3h9i5j8l",
-"name": "Send WhatsApp Reply",
+"id": "node-twilio",
+"name": "Send WhatsApp Reply (Twilio)",
 "type": "n8n-nodes-base.twilio",
 "typeVersion": 1,
-"position": [1340,,
+"position": [1580,,
 "credentials": {
 "twilioApi": {
 "id": "",
@@ -122,15 +118,13 @@
 "parameters": {
 "respondWith": "text",
 "responseBody": "OK",
-"options": {
-"responseCode": 200
-}
+"options": { "responseCode": 200 }
 },
-"id": "i5j890k2-1k4l-0h9i-gl5j-8l2h4i0j6k9m",
+"id": "node-respond",
 "name": "Webhook Response",
 "type": "n8n-nodes-base.respondToWebhook",
 "typeVersion": 1,
-"position": [1560,
+"position": [1800,
 }
 ],
 "connections": {
@@ -139,32 +133,36 @@
 },
 "Parse Command": {
 "main": [[
-{ "node": "Is LIST Command", "type": "main", "index": 0 },
-{ "node": "Is SUMMARY Command", "type": "main", "index": 0 },
+{ "node": "Is LIST", "type": "main", "index": 0 },
+{ "node": "Is SUMMARY", "type": "main", "index": 0 },
 { "node": "Format Response", "type": "main", "index": 0 }
 ]]
 },
-"Is LIST Command": {
+"Is LIST": {
 "main": [[{ "node": "Google Drive List", "type": "main", "index": 0 }]]
 },
-"Is SUMMARY Command": {
+"Is SUMMARY": {
 "main": [[{ "node": "Google Drive Download", "type": "main", "index": 0 }]]
 },
 "Google Drive List": {
-"main": [[{ "node": "Format Response", "type": "main", "index": 0 }]]
+"main": [[{ "node": "Carry Base Fields (LIST)", "type": "main", "index": 0 }]]
 },
 "Google Drive Download": {
+"main": [[{ "node": "Carry Base Fields (SUMMARY)", "type": "main", "index": 0 }]]
+},
+"Carry Base Fields (LIST)": {
+"main": [[{ "node": "Format Response", "type": "main", "index": 0 }]]
+},
+"Carry Base Fields (SUMMARY)": {
 "main": [[{ "node": "Format Response", "type": "main", "index": 0 }]]
 },
 "Format Response": {
-"main": [[{ "node": "Send WhatsApp Reply", "type": "main", "index": 0 }]]
+"main": [[{ "node": "Send WhatsApp Reply (Twilio)", "type": "main", "index": 0 }]]
 },
-"Send WhatsApp Reply": {
+"Send WhatsApp Reply (Twilio)": {
 "main": [[{ "node": "Webhook Response", "type": "main", "index": 0 }]]
 }
-],
-"createdAt": "2024-08-08T15:30:00.000Z",
-"updatedAt": "2024-08-08T15:30:00.000Z",
+},
 "settings": {},
 "staticData": {},
 "tags": []
